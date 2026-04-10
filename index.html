@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Production Job Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --font: 'IBM Plex Sans', sans-serif;
+      --font-mono: 'IBM Plex Mono', monospace;
+      --bg: #F7F6F3;
+      --surface: #FFFFFF;
+      --surface2: #F1EFE8;
+      --border: rgba(0,0,0,0.1);
+      --border-strong: rgba(0,0,0,0.18);
+      --text: #1A1A18;
+      --text-muted: #6B6B67;
+      --text-faint: #9B9B97;
+      --amber-bg: #FAEEDA; --amber-text: #854F0B;
+      --blue-bg: #E6F1FB;  --blue-text: #185FA5;
+      --green-bg: #EAF3DE; --green-text: #3B6D11;
+      --red-bg: #FCEBEB;   --red-text: #A32D2D;
+      --gray-bg: #F1EFE8;  --gray-text: #5F5E5A;
+      --teal-bg: #E1F5EE;  --teal-text: #0F6E56;
+      --radius: 8px;
+      --radius-lg: 12px;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    /* ── Layout ── */
+    .app { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+
+    /* ── Top bar ── */
+    .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; flex-wrap: wrap; gap: 12px; }
+    .topbar-left h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
+    .topbar-left p  { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .topbar-right   { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+    .sync-badge {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--text-muted);
+      background: var(--surface); border: 0.5px solid var(--border);
+      border-radius: var(--radius); padding: 5px 10px;
+    }
+    .sync-dot { width: 7px; height: 7px; border-radius: 50%; background: #ccc; transition: background 0.3s; }
+    .sync-dot.connected { background: #639922; }
+    .sync-dot.syncing   { background: #BA7517; animation: pulse 1s infinite; }
+    .sync-dot.error     { background: #E24B4A; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    /* ── Config banner ── */
+    #config-banner {
+      background: var(--amber-bg); border: 0.5px solid var(--amber-text);
+      border-radius: var(--radius-lg); padding: 1rem 1.25rem;
+      margin-bottom: 1.5rem; display: flex; gap: 12px; align-items: flex-start;
+    }
+    #config-banner.hidden { display: none; }
+    .banner-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+    .banner-body h3 { font-size: 13px; font-weight: 600; color: var(--amber-text); margin-bottom: 4px; }
+    .banner-body p  { font-size: 12px; color: var(--amber-text); line-height: 1.6; }
+    .banner-body a  { color: var(--amber-text); text-decoration: underline; }
+    .banner-fields  { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+    .banner-fields input {
+      flex: 1; min-width: 180px; font-size: 12px; font-family: var(--font-mono);
+      padding: 6px 10px; border: 0.5px solid var(--amber-text);
+      border-radius: var(--radius); background: rgba(255,255,255,0.7);
+      color: var(--text); outline: none;
+    }
+    .banner-fields input:focus { background: #fff; }
+    .btn-connect {
+      font-size: 12px; font-weight: 600; padding: 6px 14px;
+      background: var(--amber-text); color: #fff;
+      border: none; border-radius: var(--radius); cursor: pointer; white-space: nowrap;
+    }
+    .btn-connect:hover { opacity: 0.88; }
+
+    /* ── Metrics ── */
+    .metrics { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin-bottom: 1.5rem; }
+    .metric { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1rem 1.1rem; }
+    .metric-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+    .metric-value { font-size: 26px; font-weight: 600; letter-spacing: -0.03em; }
+    .metric-sub   { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+
+    /* ── Controls ── */
+    .controls { display: flex; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
+    .controls input[type=text], .controls select {
+      font-family: var(--font); font-size: 13px; padding: 7px 11px;
+      border: 0.5px solid var(--border-strong); border-radius: var(--radius);
+      background: var(--surface); color: var(--text); outline: none;
+    }
+    .controls input[type=text] { flex: 1; min-width: 180px; max-width: 260px; }
+    .controls input:focus, .controls select:focus { border-color: #378ADD; }
+    .btn-add {
+      font-family: var(--font); font-size: 13px; font-weight: 600;
+      padding: 7px 16px; background: var(--text); color: var(--bg);
+      border: none; border-radius: var(--radius); cursor: pointer; white-space: nowrap;
+    }
+    .btn-add:hover { opacity: 0.85; }
+    .btn-refresh {
+      font-family: var(--font); font-size: 13px; padding: 7px 12px;
+      background: var(--surface); border: 0.5px solid var(--border-strong);
+      border-radius: var(--radius); cursor: pointer; color: var(--text-muted);
+    }
+    .btn-refresh:hover { color: var(--text); border-color: var(--text); }
+
+    /* ── Col headers ── */
+    .col-headers {
+      display: grid; grid-template-columns: 80px 2fr 130px 90px 110px 80px;
+      gap: 10px; padding: 0 1rem 6px;
+      font-size: 11px; color: var(--text-faint);
+      text-transform: uppercase; letter-spacing: 0.07em;
+    }
+
+    /* ── Job cards ── */
+    .job-list { display: flex; flex-direction: column; gap: 6px; }
+
+    .job-card {
+      background: var(--surface); border: 0.5px solid var(--border);
+      border-radius: var(--radius-lg); overflow: hidden;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .job-card:hover { border-color: var(--border-strong); }
+    .job-card.expanded { border-color: rgba(0,0,0,0.25); }
+
+    .job-row {
+      display: grid; grid-template-columns: 80px 2fr 130px 90px 110px 80px;
+      gap: 10px; padding: 0.9rem 1rem; align-items: center; cursor: pointer;
+    }
+
+    .job-id   { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
+    .job-name { font-size: 14px; font-weight: 500; color: var(--text); }
+
+    .pill {
+      display: inline-flex; align-items: center;
+      font-size: 11px; font-weight: 500; padding: 3px 9px;
+      border-radius: 20px; white-space: nowrap;
+    }
+    .s-pending     { background: var(--amber-bg); color: var(--amber-text); }
+    .s-in-progress { background: var(--blue-bg);  color: var(--blue-text);  }
+    .s-done        { background: var(--green-bg); color: var(--green-text); }
+    .s-on-hold     { background: var(--gray-bg);  color: var(--gray-text);  }
+    .p-high   { background: var(--red-bg);   color: var(--red-text);  }
+    .p-medium { background: var(--amber-bg); color: var(--amber-text);}
+    .p-low    { background: var(--teal-bg);  color: var(--teal-text); }
+
+    .due-cell { font-size: 13px; color: var(--text-muted); }
+    .due-cell.overdue { color: var(--red-text); font-weight: 600; }
+
+    .card-actions { display: flex; gap: 4px; justify-content: flex-end; }
+    .icon-btn {
+      width: 28px; height: 28px; border-radius: var(--radius);
+      border: 0.5px solid var(--border); background: transparent;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      font-size: 13px; color: var(--text-muted);
+    }
+    .icon-btn:hover { background: var(--surface2); border-color: var(--border-strong); color: var(--text); }
+
+    /* ── Detail panel ── */
+    .detail-panel {
+      border-top: 0.5px solid var(--border);
+      background: var(--surface2);
+      padding: 1rem 1rem 1rem 1rem;
+      display: none;
+    }
+    .job-card.expanded .detail-panel { display: block; }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+    .detail-section label {
+      font-size: 10px; color: var(--text-faint);
+      text-transform: uppercase; letter-spacing: 0.08em;
+      display: block; margin-bottom: 4px;
+    }
+    .detail-section p { font-size: 13px; color: var(--text); line-height: 1.6; }
+    .file-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; font-family: var(--font-mono);
+      background: var(--surface); border: 0.5px solid var(--border-strong);
+      border-radius: var(--radius); padding: 3px 8px;
+      margin: 2px 2px 2px 0; color: var(--text-muted);
+    }
+
+    /* ── Empty state ── */
+    .empty-state {
+      text-align: center; padding: 3rem 1rem;
+      color: var(--text-muted); font-size: 14px;
+    }
+    .empty-state span { display: block; font-size: 28px; margin-bottom: 8px; }
+
+    /* ── Loading ── */
+    .loading-bar {
+      height: 2px; background: linear-gradient(90deg, var(--blue-bg), #378ADD, var(--blue-bg));
+      background-size: 200%; animation: shimmer 1.2s infinite;
+      border-radius: 2px; margin-bottom: 1rem;
+    }
+    @keyframes shimmer { 0%{background-position:200%} 100%{background-position:-200%} }
+
+    /* ── Modal ── */
+    .modal-backdrop {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.35); z-index: 200;
+      align-items: center; justify-content: center; padding: 1rem;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      background: var(--surface); border-radius: var(--radius-lg);
+      border: 0.5px solid var(--border-strong);
+      padding: 1.5rem; width: 100%; max-width: 460px;
+      max-height: 90vh; overflow-y: auto;
+    }
+    .modal h2 { font-size: 16px; font-weight: 600; margin-bottom: 1rem; }
+    .modal-fields { display: flex; flex-direction: column; gap: 10px; }
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .modal label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-bottom: 3px; }
+    .modal input[type=text], .modal input[type=date], .modal select, .modal textarea {
+      width: 100%; font-family: var(--font); font-size: 13px;
+      padding: 7px 10px; border: 0.5px solid var(--border-strong);
+      border-radius: var(--radius); background: var(--surface); color: var(--text); outline: none;
+    }
+    .modal input:focus, .modal select:focus, .modal textarea:focus { border-color: #378ADD; }
+    .modal textarea { resize: vertical; min-height: 80px; }
+    .modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 1rem; }
+    .btn-secondary {
+      font-family: var(--font); font-size: 13px; padding: 7px 14px;
+      background: var(--surface); border: 0.5px solid var(--border-strong);
+      border-radius: var(--radius); cursor: pointer; color: var(--text-muted);
+    }
+    .btn-secondary:hover { color: var(--text); border-color: var(--text); }
+    .btn-saving { opacity: 0.6; pointer-events: none; }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed; bottom: 1.5rem; right: 1.5rem;
+      background: var(--text); color: var(--bg);
+      font-size: 13px; padding: 10px 16px; border-radius: var(--radius);
+      opacity: 0; transform: translateY(8px);
+      transition: opacity 0.2s, transform 0.2s; z-index: 300;
+      pointer-events: none;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 700px) {
+      .metrics { grid-template-columns: repeat(2, 1fr); }
+      .col-headers { display: none; }
+      .job-row { grid-template-columns: 1fr 1fr; }
+      .job-row > *:nth-child(1),
+      .job-row > *:nth-child(4),
+      .job-row > *:nth-child(5) { display: none; }
+      .detail-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <h1>Production job dashboard</h1>
+      <p id="last-sync-text">Not connected to Google Sheets</p>
+    </div>
+    <div class="topbar-right">
+      <div class="sync-badge">
+        <span class="sync-dot" id="sync-dot"></span>
+        <span id="sync-label">Disconnected</span>
+      </div>
+      <button class="btn-refresh" onclick="loadFromSheets()" title="Refresh from Sheets">↺ Sync</button>
+      <button class="btn-add" onclick="openModal()">+ New job</button>
+    </div>
+  </div>
+
+  <!-- Config banner -->
+  <div id="config-banner">
+    <div class="banner-icon">⚙️</div>
+    <div class="banner-body" style="flex:1">
+      <h3>Connect your Google Sheet</h3>
+      <p>
+        Paste your <strong>Sheet ID</strong> and <strong>API key</strong> below to go live.
+        <a href="https://github.com/your-org/production-dashboard#setup" target="_blank">Setup guide ↗</a>
+      </p>
+      <div class="banner-fields">
+        <input id="input-sheet-id"  placeholder="Google Sheet ID (from URL)" />
+        <input id="input-api-key"   placeholder="Google API Key" />
+        <button class="btn-connect" onclick="saveConfig()">Connect</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading bar -->
+  <div class="loading-bar" id="loading-bar" style="display:none"></div>
+
+  <!-- Metrics -->
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-label">Total jobs</div>
+      <div class="metric-value" id="m-total">—</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">In progress</div>
+      <div class="metric-value" id="m-progress" style="color:var(--blue-text)">—</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Completed</div>
+      <div class="metric-value" id="m-done" style="color:var(--green-text)">—</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Overdue</div>
+      <div class="metric-value" id="m-overdue" style="color:var(--red-text)">—</div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <input type="text" id="search" placeholder="Search jobs or IDs…" oninput="render()" />
+    <select id="filter-status" onchange="render()">
+      <option value="">All statuses</option>
+      <option>Pending</option>
+      <option>In progress</option>
+      <option>Done</option>
+      <option>On hold</option>
+    </select>
+    <select id="filter-priority" onchange="render()">
+      <option value="">All priorities</option>
+      <option>High</option>
+      <option>Medium</option>
+      <option>Low</option>
+    </select>
+    <select id="sort-by" onchange="render()">
+      <option value="due">Sort: due date</option>
+      <option value="priority">Sort: priority</option>
+      <option value="id">Sort: job ID</option>
+      <option value="status">Sort: status</option>
+    </select>
+  </div>
+
+  <!-- Column headers -->
+  <div class="col-headers">
+    <span>Job ID</span><span>Job name</span><span>Status</span>
+    <span>Priority</span><span>Due date</span><span></span>
+  </div>
+
+  <!-- Job list -->
+  <div class="job-list" id="job-list"></div>
+
+</div>
+
+<!-- Add / Edit modal -->
+<div class="modal-backdrop" id="modal-backdrop" onclick="handleBackdropClick(event)">
+  <div class="modal">
+    <h2 id="modal-title">Add new job</h2>
+    <div class="modal-fields">
+      <div>
+        <label>Job name *</label>
+        <input type="text" id="f-name" placeholder="e.g. Conveyor belt assembly — Line A" />
+      </div>
+      <div class="field-row">
+        <div>
+          <label>Status</label>
+          <select id="f-status">
+            <option>Pending</option>
+            <option>In progress</option>
+            <option>Done</option>
+            <option>On hold</option>
+          </select>
+        </div>
+        <div>
+          <label>Priority</label>
+          <select id="f-priority">
+            <option>High</option>
+            <option>Medium</option>
+            <option>Low</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label>Due date</label>
+        <input type="date" id="f-due" />
+      </div>
+      <div>
+        <label>Assigned to</label>
+        <input type="text" id="f-assigned" placeholder="e.g. Team B / John Smith" />
+      </div>
+      <div>
+        <label>File names (comma separated)</label>
+        <input type="text" id="f-files" placeholder="e.g. specs.pdf, checklist.xlsx" />
+      </div>
+      <div>
+        <label>Notes</label>
+        <textarea id="f-notes" placeholder="Add any relevant notes…"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn-add" id="modal-save-btn" onclick="saveJob()">Save job</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════
+//  CONFIG  — loaded from localStorage or env
+// ═══════════════════════════════════════════════
+const CONFIG = {
+  // These are injected by config.js (see env setup) OR set by the user in the banner
+  SHEET_ID:  window.__SHEET_ID__  || localStorage.getItem("1iYgsebfM7fVFG8Yq8aCqCp5AcvWwhSsvMdfAaNFFiu8")  || "",
+  API_KEY:   window.__API_KEY__   || localStorage.getItem("AIzaSyAGUGUQBOMbTD6fEzrTpPJ-5Dplu3G7Ld8")   || "",
+  SHEET_NAME: "Jobs",   // The tab name inside your Google Sheet
+  RANGE: "Jobs!A:H",    // Columns: ID, Name, Status, Priority, DueDate, Assigned, Notes, Files
+};
+
+// ═══════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════
+let jobs = [];
+let counter = 1;
+let expandedId = null;
+let editingId = null;
+
+// ═══════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════
+window.addEventListener("DOMContentLoaded", () => {
+  if (CONFIG.SHEET_ID && CONFIG.API_KEY) {
+    document.getElementById("config-banner").classList.add("hidden");
+    document.getElementById("input-sheet-id").value = CONFIG.SHEET_ID;
+    document.getElementById("input-api-key").value  = CONFIG.API_KEY;
+    loadFromSheets();
+  } else {
+    loadDemoData();
+    setSyncStatus("disconnected");
+  }
+});
+
+// ═══════════════════════════════════════════════
+//  DEMO DATA (shown before Sheets is connected)
+// ═══════════════════════════════════════════════
+function loadDemoData() {
+  jobs = [
+    { id:"JOB-001", name:"Conveyor belt assembly — Line A", status:"In progress", priority:"High",   due:"2026-04-12", assigned:"Team A", notes:"Awaiting motor mount parts. Follow up with procurement.", files:["specs_v2.pdf","checklist.xlsx"] },
+    { id:"JOB-002", name:"Hydraulic press calibration",    status:"Pending",     priority:"High",   due:"2026-04-15", assigned:"Maintenance", notes:"Requires certified tech on site.",                    files:["calibration_guide.pdf"] },
+    { id:"JOB-003", name:"Quality audit — Batch #847",      status:"Done",        priority:"Medium", due:"2026-04-08", assigned:"QA Team",    notes:"All checks passed. Report filed.",                     files:["audit_report_847.pdf","photos.zip"] },
+    { id:"JOB-004", name:"Welding jig replacement — Stn 3", status:"On hold",     priority:"Medium", due:"2026-04-20", assigned:"Engineering",notes:"Waiting for engineering sign-off.",                    files:[] },
+    { id:"JOB-005", name:"Forklift cert renewal",           status:"Pending",     priority:"Low",    due:"2026-04-30", assigned:"HR",         notes:"3 operators due. Book external trainer.",              files:["renewal_form.docx"] },
+    { id:"JOB-006", name:"Packaging line motor swap",       status:"In progress", priority:"High",   due:"2026-04-09", assigned:"Team B",     notes:"Motor sourced. Running behind schedule.",              files:["motor_spec.pdf"] },
+  ];
+  counter = jobs.length + 1;
+  render();
+}
+
+// ═══════════════════════════════════════════════
+//  GOOGLE SHEETS — READ
+// ═══════════════════════════════════════════════
+async function loadFromSheets() {
+  if (!CONFIG.SHEET_ID || !CONFIG.API_KEY) return;
+  setLoading(true);
+  setSyncStatus("syncing");
+  try {
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${CONFIG.RANGE}?key=${CONFIG.API_KEY}`;
+    const res  = await fetch(url);
+    if (!res.ok) throw new Error(`Sheets API error: ${res.status} ${res.statusText}`);
+    const data = await res.json();
+    const rows = (data.values || []).slice(1); // skip header row
+    jobs = rows.map(r => ({
+      id:       r[0] || "",
+      name:     r[1] || "",
+      status:   r[2] || "Pending",
+      priority: r[3] || "Medium",
+      due:      r[4] || "",
+      assigned: r[5] || "",
+      notes:    r[6] || "",
+      files:    r[7] ? r[7].split(",").map(f => f.trim()).filter(Boolean) : [],
+    })).filter(j => j.id && j.name);
+    // derive next counter from existing IDs
+    const nums = jobs.map(j => parseInt(j.id.replace(/\D/g,""))).filter(n => !isNaN(n));
+    counter = nums.length ? Math.max(...nums) + 1 : 1;
+    setSyncStatus("connected");
+    setLastSync();
+    render();
+  } catch(e) {
+    console.error(e);
+    setSyncStatus("error");
+    showToast("Sync failed: " + e.message, "error");
+    if (!jobs.length) loadDemoData();
+  } finally {
+    setLoading(false);
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  GOOGLE SHEETS — APPEND ROW
+// ═══════════════════════════════════════════════
+async function appendToSheets(job) {
+  if (!CONFIG.SHEET_ID || !CONFIG.API_KEY) return false;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${CONFIG.SHEET_NAME}!A:H:append?valueInputOption=USER_ENTERED&key=${CONFIG.API_KEY}`;
+  const body = { values: [[ job.id, job.name, job.status, job.priority, job.due, job.assigned, job.notes, (job.files||[]).join(", ") ]] };
+  const res = await fetch(url, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body) });
+  return res.ok;
+}
+
+// ═══════════════════════════════════════════════
+//  GOOGLE SHEETS — UPDATE ROW
+// ═══════════════════════════════════════════════
+async function updateInSheets(job) {
+  if (!CONFIG.SHEET_ID || !CONFIG.API_KEY) return false;
+  // Find the row number by reading the sheet first
+  const readUrl = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${CONFIG.RANGE}?key=${CONFIG.API_KEY}`;
+  const readRes = await fetch(readUrl);
+  const readData = await readRes.json();
+  const rows = readData.values || [];
+  const rowIndex = rows.findIndex(r => r[0] === job.id);
+  if (rowIndex < 0) return false;
+  const sheetRow = rowIndex + 1; // 1-indexed
+  const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${CONFIG.SHEET_NAME}!A${sheetRow}:H${sheetRow}?valueInputOption=USER_ENTERED&key=${CONFIG.API_KEY}`;
+  const body = { values: [[ job.id, job.name, job.status, job.priority, job.due, job.assigned, job.notes, (job.files||[]).join(", ") ]] };
+  const res = await fetch(updateUrl, { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body) });
+  return res.ok;
+}
+
+// ═══════════════════════════════════════════════
+//  GOOGLE SHEETS — DELETE ROW
+// ═══════════════════════════════════════════════
+async function deleteFromSheets(jobId) {
+  if (!CONFIG.SHEET_ID || !CONFIG.API_KEY) return false;
+  // Read to find row index
+  const readUrl = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${CONFIG.RANGE}?key=${CONFIG.API_KEY}`;
+  const readRes = await fetch(readUrl);
+  const readData = await readRes.json();
+  const rows = readData.values || [];
+  const rowIndex = rows.findIndex(r => r[0] === jobId);
+  if (rowIndex < 0) return false;
+  // Use batchUpdate to delete the row
+  const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}?key=${CONFIG.API_KEY}`;
+  const metaRes = await fetch(metaUrl);
+  const metaData = await metaRes.json();
+  const sheet = metaData.sheets.find(s => s.properties.title === CONFIG.SHEET_NAME);
+  if (!sheet) return false;
+  const sheetId = sheet.properties.sheetId;
+  const deleteUrl = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}:batchUpdate?key=${CONFIG.API_KEY}`;
+  const body = { requests: [{ deleteDimension: { range: { sheetId, dimension:"ROWS", startIndex: rowIndex, endIndex: rowIndex + 1 } } }] };
+  const res = await fetch(deleteUrl, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body) });
+  return res.ok;
+}
+
+// ═══════════════════════════════════════════════
+//  SAVE CONFIG
+// ═══════════════════════════════════════════════
+function saveConfig() {
+  const id  = document.getElementById("input-sheet-id").value.trim();
+  const key = document.getElementById("input-api-key").value.trim();
+  if (!id || !key) { showToast("Please fill in both fields."); return; }
+  CONFIG.SHEET_ID = id;
+  CONFIG.API_KEY  = key;
+  localStorage.setItem("sheet_id", id);
+  localStorage.setItem("api_key",  key);
+  document.getElementById("config-banner").classList.add("hidden");
+  loadFromSheets();
+}
+
+// ═══════════════════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════════════════
+function render() {
+  const search = document.getElementById("search").value.toLowerCase();
+  const fs     = document.getElementById("filter-status").value;
+  const fp     = document.getElementById("filter-priority").value;
+  const sort   = document.getElementById("sort-by").value;
+  const today  = new Date().toISOString().split("T")[0];
+
+  let filtered = jobs.filter(j => {
+    if (search && !j.name.toLowerCase().includes(search) && !j.id.toLowerCase().includes(search)) return false;
+    if (fs && j.status !== fs) return false;
+    if (fp && j.priority !== fp) return false;
+    return true;
+  });
+
+  const pOrder = {High:0, Medium:1, Low:2};
+  const sOrder = {"In progress":0, Pending:1, "On hold":2, Done:3};
+  if (sort === "due")      filtered.sort((a,b) => (a.due||"9999") > (b.due||"9999") ? 1 : -1);
+  else if (sort === "priority") filtered.sort((a,b) => (pOrder[a.priority]||1) - (pOrder[b.priority]||1));
+  else if (sort === "status")   filtered.sort((a,b) => (sOrder[a.status]||1) - (sOrder[b.status]||1));
+  else filtered.sort((a,b) => a.id > b.id ? 1 : -1);
+
+  const list = document.getElementById("job-list");
+  if (!filtered.length) {
+    list.innerHTML = `<div class="empty-state"><span>📋</span>No jobs match your filters.</div>`;
+  } else {
+    list.innerHTML = filtered.map(j => {
+      const overdue   = j.due && j.due < today && j.status !== "Done";
+      const expanded  = expandedId === j.id;
+      const fileChips = (j.files||[]).map(f => `<span class="file-chip">📎 ${f}</span>`).join("") || '<span style="font-size:12px;color:var(--text-faint)">No files attached</span>';
+      return `
+      <div class="job-card${expanded?" expanded":""}" id="card-${j.id}">
+        <div class="job-row" onclick="toggleExpand('${j.id}', event)">
+          <div class="job-id">${j.id}</div>
+          <div class="job-name">${j.name}</div>
+          <div><span class="pill ${statusClass(j.status)}">${j.status}</span></div>
+          <div><span class="pill ${priorityClass(j.priority)}">${j.priority}</span></div>
+          <div class="due-cell${overdue?" overdue":""}">${j.due ? formatDate(j.due) : "—"}${overdue?" ⚠":""}  </div>
+          <div class="card-actions" onclick="event.stopPropagation()">
+            <button class="icon-btn" title="Edit"   onclick="editJob('${j.id}')">✎</button>
+            <button class="icon-btn" title="Delete" onclick="deleteJob('${j.id}')">✕</button>
+          </div>
+        </div>
+        ${expanded ? `
+        <div class="detail-panel">
+          <div class="detail-grid">
+            <div class="detail-section"><label>Assigned to</label><p>${j.assigned||"Unassigned"}</p></div>
+            <div class="detail-section"><label>Notes</label><p>${j.notes||"No notes."}</p></div>
+            <div class="detail-section"><label>Files</label><div>${fileChips}</div></div>
+          </div>
+        </div>` : ""}
+      </div>`;
+    }).join("");
+  }
+
+  // Update metrics
+  const overdueCount = jobs.filter(j => j.due && j.due < today && j.status !== "Done").length;
+  document.getElementById("m-total").textContent    = jobs.length;
+  document.getElementById("m-progress").textContent = jobs.filter(j => j.status === "In progress").length;
+  document.getElementById("m-done").textContent     = jobs.filter(j => j.status === "Done").length;
+  document.getElementById("m-overdue").textContent  = overdueCount;
+}
+
+// ═══════════════════════════════════════════════
+//  INTERACTIONS
+// ═══════════════════════════════════════════════
+function toggleExpand(id, e) {
+  if (e.target.closest(".card-actions")) return;
+  expandedId = expandedId === id ? null : id;
+  render();
+}
+
+function openModal(job) {
+  editingId = job ? job.id : null;
+  document.getElementById("modal-title").textContent = job ? "Edit job" : "Add new job";
+  document.getElementById("f-name").value     = job?.name     || "";
+  document.getElementById("f-status").value   = job?.status   || "Pending";
+  document.getElementById("f-priority").value = job?.priority || "Medium";
+  document.getElementById("f-due").value      = job?.due      || "";
+  document.getElementById("f-assigned").value = job?.assigned || "";
+  document.getElementById("f-files").value    = (job?.files||[]).join(", ");
+  document.getElementById("f-notes").value    = job?.notes    || "";
+  document.getElementById("modal-backdrop").classList.add("open");
+  setTimeout(() => document.getElementById("f-name").focus(), 50);
+}
+
+function closeModal() { document.getElementById("modal-backdrop").classList.remove("open"); editingId = null; }
+function handleBackdropClick(e) { if (e.target === e.currentTarget) closeModal(); }
+
+function editJob(id) {
+  const job = jobs.find(j => j.id === id);
+  if (job) openModal(job);
+}
+
+async function saveJob() {
+  const name = document.getElementById("f-name").value.trim();
+  if (!name) { showToast("Job name is required."); return; }
+  const filesRaw = document.getElementById("f-files").value.trim();
+  const job = {
+    id:       editingId || ("JOB-" + String(counter).padStart(3,"0")),
+    name,
+    status:   document.getElementById("f-status").value,
+    priority: document.getElementById("f-priority").value,
+    due:      document.getElementById("f-due").value,
+    assigned: document.getElementById("f-assigned").value.trim(),
+    notes:    document.getElementById("f-notes").value.trim(),
+    files:    filesRaw ? filesRaw.split(",").map(f => f.trim()).filter(Boolean) : [],
+  };
+
+  const btn = document.getElementById("modal-save-btn");
+  btn.textContent = "Saving…"; btn.classList.add("btn-saving");
+
+  if (editingId) {
+    jobs = jobs.map(j => j.id === editingId ? job : j);
+    if (CONFIG.SHEET_ID) {
+      const ok = await updateInSheets(job);
+      showToast(ok ? "Job updated ✓" : "Saved locally (Sheets update failed)");
+    } else { showToast("Job updated ✓"); }
+  } else {
+    counter++;
+    jobs.push(job);
+    if (CONFIG.SHEET_ID) {
+      const ok = await appendToSheets(job);
+      showToast(ok ? "Job added to Sheets ✓" : "Saved locally (Sheets append failed)");
+    } else { showToast("Job added ✓"); }
+  }
+
+  btn.textContent = "Save job"; btn.classList.remove("btn-saving");
+  closeModal();
+  render();
+}
+
+async function deleteJob(id) {
+  if (!confirm("Delete this job? This cannot be undone.")) return;
+  jobs = jobs.filter(j => j.id !== id);
+  if (expandedId === id) expandedId = null;
+  render();
+  if (CONFIG.SHEET_ID) {
+    const ok = await deleteFromSheets(id);
+    showToast(ok ? "Job deleted ✓" : "Deleted locally (Sheets delete failed)");
+  } else { showToast("Job deleted ✓"); }
+}
+
+// ═══════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════
+function statusClass(s) {
+  return { "Pending":"s-pending","In progress":"s-in-progress","Done":"s-done","On hold":"s-on-hold" }[s] || "s-pending";
+}
+function priorityClass(p) {
+  return { High:"p-high", Medium:"p-medium", Low:"p-low" }[p] || "p-medium";
+}
+function formatDate(d) {
+  if (!d) return "—";
+  const [y,m,dy] = d.split("-");
+  return `${m}/${dy}/${y}`;
+}
+function setLoading(on) { document.getElementById("loading-bar").style.display = on ? "block" : "none"; }
+function setSyncStatus(state) {
+  const dot   = document.getElementById("sync-dot");
+  const label = document.getElementById("sync-label");
+  dot.className = "sync-dot";
+  if (state === "connected")    { dot.classList.add("connected"); label.textContent = "Sheets live"; }
+  else if (state === "syncing") { dot.classList.add("syncing");   label.textContent = "Syncing…"; }
+  else if (state === "error")   { dot.classList.add("error");     label.textContent = "Sync error"; }
+  else                          { label.textContent = "Disconnected"; }
+}
+function setLastSync() {
+  const t = new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+  document.getElementById("last-sync-text").textContent = `Last synced at ${t}`;
+}
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 3000);
+}
+</script>
+</body>
+</html>
