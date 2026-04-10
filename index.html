@@ -414,8 +414,8 @@
 // ═══════════════════════════════════════════════
 const CONFIG = {
   // These are injected by config.js (see env setup) OR set by the user in the banner
-  SHEET_ID:  window.__SHEET_ID__  || localStorage.getItem("1iYgsebfM7fVFG8Yq8aCqCp5AcvWwhSsvMdfAaNFFiu8")  || "",
-  API_KEY:   window.__API_KEY__   || localStorage.getItem("AIzaSyAGUGUQBOMbTD6fEzrTpPJ-5Dplu3G7Ld8")   || "",
+  SHEET_ID:  window.__SHEET_ID__  || localStorage.getItem("sheet_id")  || "1iYgsebfM7fVFG8Yq8aCqCp5AcvWwhSsvMdfAaNFFiu8",
+  API_KEY:   window.__API_KEY__   || localStorage.getItem("api_key")   || "AIzaSyAGUGUQBOMbTD6fEzrTpPJ-5Dplu3G7Ld8",
   SHEET_NAME: "Jobs",   // The tab name inside your Google Sheet
   RANGE: "Jobs!A:H",    // Columns: ID, Name, Status, Priority, DueDate, Assigned, Notes, Files
 };
