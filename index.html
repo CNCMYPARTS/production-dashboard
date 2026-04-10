@@ -413,11 +413,7 @@
 //  CONFIG  — loaded from localStorage or env
 // ═══════════════════════════════════════════════
 const CONFIG = {
-  // These are injected by config.js (see env setup) OR set by the user in the banner
-  SHEET_ID:  window.__SHEET_ID__  || localStorage.getItem("sheet_id")  || "1iYgsebfM7fVFG8Yq8aCqCp5AcvWwhSsvMdfAaNFFiu8",
-  API_KEY:   window.__API_KEY__   || localStorage.getItem("api_key")   || "AIzaSyAGUGUQBOMbTD6fEzrTpPJ-5Dplu3G7Ld8",
-  SHEET_NAME: "Jobs",   // The tab name inside your Google Sheet
-  RANGE: "Jobs!A:H",    // Columns: ID, Name, Status, Priority, DueDate, Assigned, Notes, Files
+  SCRIPT_URL: "https://script.google.com/macros/s/AKfycbx2ERXPzKAslEAYCJAusapFLjPNx4YdINYP6AxUt40vCmL3yUFNbpo58ulNQ2J5yeWB/exec",
 };
 
 // ═══════════════════════════════════════════════
@@ -432,15 +428,8 @@ let editingId = null;
 //  INIT
 // ═══════════════════════════════════════════════
 window.addEventListener("DOMContentLoaded", () => {
-  if (CONFIG.SHEET_ID && CONFIG.API_KEY) {
-    document.getElementById("config-banner").classList.add("hidden");
-    document.getElementById("input-sheet-id").value = CONFIG.SHEET_ID;
-    document.getElementById("input-api-key").value  = CONFIG.API_KEY;
-    loadFromSheets();
-  } else {
-    loadDemoData();
-    setSyncStatus("disconnected");
-  }
+  document.getElementById("config-banner").classList.add("hidden");
+  loadFromSheets();
 });
 
 // ═══════════════════════════════════════════════
@@ -463,26 +452,22 @@ function loadDemoData() {
 //  GOOGLE SHEETS — READ
 // ═══════════════════════════════════════════════
 async function loadFromSheets() {
-  if (!CONFIG.SHEET_ID || !CONFIG.API_KEY) return;
   setLoading(true);
   setSyncStatus("syncing");
   try {
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${CONFIG.RANGE}?key=${CONFIG.API_KEY}`;
-    const res  = await fetch(url);
-    if (!res.ok) throw new Error(`Sheets API error: ${res.status} ${res.statusText}`);
+    const res  = await fetch(CONFIG.SCRIPT_URL);
+    if (!res.ok) throw new Error(`Script error: ${res.status} ${res.statusText}`);
     const data = await res.json();
-    const rows = (data.values || []).slice(1); // skip header row
-    jobs = rows.map(r => ({
-      id:       r[0] || "",
-      name:     r[1] || "",
-      status:   r[2] || "Pending",
-      priority: r[3] || "Medium",
-      due:      r[4] || "",
-      assigned: r[5] || "",
-      notes:    r[6] || "",
-      files:    r[7] ? r[7].split(",").map(f => f.trim()).filter(Boolean) : [],
+    jobs = data.map(r => ({
+      id:       r.ID       || "",
+      name:     r.Name     || "",
+      status:   r.Status   || "Pending",
+      priority: r.Priority || "Medium",
+      due:      r.DueDate  || "",
+      assigned: r.Assigned || "",
+      notes:    r.Notes    || "",
+      files:    r.Files ? r.Files.split(",").map(f => f.trim()).filter(Boolean) : [],
     })).filter(j => j.id && j.name);
-    // derive next counter from existing IDs
     const nums = jobs.map(j => parseInt(j.id.replace(/\D/g,""))).filter(n => !isNaN(n));
     counter = nums.length ? Math.max(...nums) + 1 : 1;
     setSyncStatus("connected");
@@ -491,7 +476,7 @@ async function loadFromSheets() {
   } catch(e) {
     console.error(e);
     setSyncStatus("error");
-    showToast("Sync failed: " + e.message, "error");
+    showToast("Sync failed: " + e.message);
     if (!jobs.length) loadDemoData();
   } finally {
     setLoading(false);
@@ -502,81 +487,38 @@ async function loadFromSheets() {
 //  GOOGLE SHEETS — APPEND ROW
 // ═══════════════════════════════════════════════
 async function appendToSheets(job) {
-  if (!CONFIG.SHEET_ID || !CONFIG.API_KEY) return false;
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${CONFIG.SHEET_NAME}!A:H:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS&key=${CONFIG.API_KEY}`;
-  const body = { values: [[ job.id, job.name, job.status, job.priority, job.due, job.assigned, job.notes, (job.files||[]).join(", ") ]] };
+  const body = { ID: job.id, Name: job.name, Status: job.status, Priority: job.priority, DueDate: job.due, Assigned: job.assigned, Notes: job.notes, Files: (job.files||[]).join(", ") };
   try {
-    const res = await fetch(url, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body) });
-    if (!res.ok) {
-      const err = await res.json();
-      console.error("Sheets append error:", err);
-      showToast("Sheets write failed: " + (err?.error?.message || res.statusText));
-      return false;
-    }
-    return true;
-  } catch(e) {
-    console.error("Sheets append exception:", e);
-    showToast("Sheets write error: " + e.message);
-    return false;
-  }
+    const res = await fetch(CONFIG.SCRIPT_URL, { method:"POST", headers:{"Content-Type":"text/plain"}, body: JSON.stringify(body) });
+    return res.ok;
+  } catch(e) { console.error(e); return false; }
 }
 
 // ═══════════════════════════════════════════════
 //  GOOGLE SHEETS — UPDATE ROW
 // ═══════════════════════════════════════════════
 async function updateInSheets(job) {
-  if (!CONFIG.SHEET_ID || !CONFIG.API_KEY) return false;
-  // Find the row number by reading the sheet first
-  const readUrl = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${CONFIG.RANGE}?key=${CONFIG.API_KEY}`;
-  const readRes = await fetch(readUrl);
-  const readData = await readRes.json();
-  const rows = readData.values || [];
-  const rowIndex = rows.findIndex(r => r[0] === job.id);
-  if (rowIndex < 0) return false;
-  const sheetRow = rowIndex + 1; // 1-indexed
-  const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${CONFIG.SHEET_NAME}!A${sheetRow}:H${sheetRow}?valueInputOption=USER_ENTERED&key=${CONFIG.API_KEY}`;
-  const body = { values: [[ job.id, job.name, job.status, job.priority, job.due, job.assigned, job.notes, (job.files||[]).join(", ") ]] };
-  const res = await fetch(updateUrl, { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body) });
-  return res.ok;
+  const body = { ID: job.id, Name: job.name, Status: job.status, Priority: job.priority, DueDate: job.due, Assigned: job.assigned, Notes: job.notes, Files: (job.files||[]).join(", ") };
+  try {
+    const res = await fetch(CONFIG.SCRIPT_URL, { method:"PUT", headers:{"Content-Type":"text/plain"}, body: JSON.stringify(body) });
+    return res.ok;
+  } catch(e) { console.error(e); return false; }
 }
 
 // ═══════════════════════════════════════════════
 //  GOOGLE SHEETS — DELETE ROW
 // ═══════════════════════════════════════════════
 async function deleteFromSheets(jobId) {
-  if (!CONFIG.SHEET_ID || !CONFIG.API_KEY) return false;
-  // Read to find row index
-  const readUrl = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${CONFIG.RANGE}?key=${CONFIG.API_KEY}`;
-  const readRes = await fetch(readUrl);
-  const readData = await readRes.json();
-  const rows = readData.values || [];
-  const rowIndex = rows.findIndex(r => r[0] === jobId);
-  if (rowIndex < 0) return false;
-  // Use batchUpdate to delete the row
-  const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}?key=${CONFIG.API_KEY}`;
-  const metaRes = await fetch(metaUrl);
-  const metaData = await metaRes.json();
-  const sheet = metaData.sheets.find(s => s.properties.title === CONFIG.SHEET_NAME);
-  if (!sheet) return false;
-  const sheetId = sheet.properties.sheetId;
-  const deleteUrl = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}:batchUpdate?key=${CONFIG.API_KEY}`;
-  const body = { requests: [{ deleteDimension: { range: { sheetId, dimension:"ROWS", startIndex: rowIndex, endIndex: rowIndex + 1 } } }] };
-  const res = await fetch(deleteUrl, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body) });
-  return res.ok;
+  try {
+    const res = await fetch(CONFIG.SCRIPT_URL + "?id=" + encodeURIComponent(jobId), { method:"DELETE" });
+    return res.ok;
+  } catch(e) { console.error(e); return false; }
 }
 
 // ═══════════════════════════════════════════════
 //  SAVE CONFIG
 // ═══════════════════════════════════════════════
 function saveConfig() {
-  const id  = document.getElementById("input-sheet-id").value.trim();
-  const key = document.getElementById("input-api-key").value.trim();
-  if (!id || !key) { showToast("Please fill in both fields."); return; }
-  CONFIG.SHEET_ID = id;
-  CONFIG.API_KEY  = key;
-  localStorage.setItem("sheet_id", id);
-  localStorage.setItem("api_key",  key);
-  document.getElementById("config-banner").classList.add("hidden");
   loadFromSheets();
 }
 
@@ -696,17 +638,13 @@ async function saveJob() {
 
   if (editingId) {
     jobs = jobs.map(j => j.id === editingId ? job : j);
-    if (CONFIG.SHEET_ID) {
-      const ok = await updateInSheets(job);
-      showToast(ok ? "Job updated ✓" : "Saved locally (Sheets update failed)");
-    } else { showToast("Job updated ✓"); }
+    const ok = await updateInSheets(job);
+    showToast(ok ? "Job updated ✓" : "Job updated locally (Sheets sync failed)");
   } else {
     counter++;
     jobs.push(job);
-    if (CONFIG.SHEET_ID) {
-      const ok = await appendToSheets(job);
-      showToast(ok ? "Job added to Sheets ✓" : "Saved locally (Sheets append failed)");
-    } else { showToast("Job added ✓"); }
+    const ok = await appendToSheets(job);
+    showToast(ok ? "Job added to Sheets ✓" : "Job saved locally (Sheets sync failed)");
   }
 
   btn.textContent = "Save job"; btn.classList.remove("btn-saving");
@@ -719,10 +657,8 @@ async function deleteJob(id) {
   jobs = jobs.filter(j => j.id !== id);
   if (expandedId === id) expandedId = null;
   render();
-  if (CONFIG.SHEET_ID) {
-    const ok = await deleteFromSheets(id);
-    showToast(ok ? "Job deleted ✓" : "Deleted locally (Sheets delete failed)");
-  } else { showToast("Job deleted ✓"); }
+  const ok = await deleteFromSheets(id);
+  showToast(ok ? "Job deleted ✓" : "Deleted locally (Sheets sync failed)");
 }
 
 // ═══════════════════════════════════════════════
